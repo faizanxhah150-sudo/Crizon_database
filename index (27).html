@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vault</title>
+<style>
+  :root{
+    --bg:#07080a;
+    --panel:#101216;
+    --panel2:#161920;
+    --line:#22262f;
+    --text:#e7e9ee;
+    --dim:#8b93a3;
+    --accent:#3d8bfd;
+    --accent2:#1f4f96;
+    --danger:#e5484d;
+    --good:#2fbf71;
+    --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:#000;}
+  body{
+    font-family:var(--sans);
+    color:var(--text);
+    overflow-x:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  ::selection{background:var(--accent2);}
+  /* ================= GATE (fully blank, no hints) ================= */
+  #gate{
+    position:fixed;inset:0;
+    background:#000;
+    z-index:9999;
+    display:flex;
+    align-items:center;justify-content:center;
+    cursor:default;
+  }
+  #gate.hidden{display:none;}
+  #gateInput{
+    position:absolute;
+    top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    width:280px;height:50px;
+    background:transparent;
+    border:none;outline:none;
+    color:#050505; /* nearly invisible caret/text on black */
+    caret-color:#0a0a0a;
+    font-family:var(--mono);
+    font-size:18px;
+    text-align:center;
+    letter-spacing:4px;
+  }
+  #gate .scan{
+    position:absolute;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(61,139,253,0.08),transparent);
+    animation:scan 6s linear infinite;
+  }
+  @keyframes scan{
+    0%{top:0%;}
+    100%{top:100%;}
+  }
+  #gateShake{animation:shake .35s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-8px);}
+    40%{transform:translateX(8px);}
+    60%{transform:translateX(-5px);}
+    80%{transform:translateX(5px);}
+  }
+
+  /* ================= APP SHELL ================= */
+  #app{min-height:100vh;background:var(--bg);display:none;}
+  #app.show{display:block;}
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(7,8,10,0.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+    padding:14px 20px;
+  }
+  .headRow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.5px;font-size:16px;}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);}
+  .storageBar{
+    flex:1;min-width:200px;max-width:340px;
+    height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;border:1px solid var(--line);
+  }
+  .storageFill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));width:0%;transition:width .4s;}
+  .storageText{font-size:12px;color:var(--dim);font-family:var(--mono);white-space:nowrap;}
+  .cats{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .catBtn{
+    padding:7px 16px;border-radius:99px;border:1px solid var(--line);
+    background:var(--panel);color:var(--dim);font-size:13px;cursor:pointer;
+    transition:.15s;font-family:var(--mono);
+  }
+  .catBtn:hover{border-color:var(--accent);color:var(--text);}
+  .catBtn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  main{padding:22px 20px 80px;max-width:1400px;margin:0 auto;}
+  .grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px;
+  }
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    display:flex;flex-direction:column;position:relative;transition:.2s transform,.2s border-color;
+  }
+  .card:hover{border-color:#3a4150;transform:translateY(-2px);}
+  .thumbWrap{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden;}
+  .thumbWrap video{width:100%;height:100%;object-fit:cover;}
+  .playIcon{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.25);opacity:0;transition:.15s;
+  }
+  .card:hover .playIcon{opacity:1;}
+  .playIcon svg{width:44px;height:44px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));}
+  .catTag{
+    position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);
+    padding:2px 9px;border-radius:6px;font-size:11px;font-family:var(--mono);color:var(--accent);
+    border:1px solid var(--line);
+  }
+  .cardBody{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;}
+  .cardName{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cardMeta{font-size:11px;color:var(--dim);font-family:var(--mono);}
+  .cardActions{display:flex;gap:8px;margin-top:2px;}
+  .btn{
+    flex:1;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text);font-size:12px;cursor:pointer;text-align:center;text-decoration:none;
+    display:flex;align-items:center;justify-content:center;gap:5px;transition:.15s;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn.danger:hover{border-color:var(--danger);color:var(--danger);}
+  .selectBox{
+    position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:5px;
+    border:2px solid rgba(255,255,255,0.5);background:rgba(0,0,0,0.4);cursor:pointer;z-index:5;
+  }
+  .selectBox.on{background:var(--accent);border-color:var(--accent);}
+  .empty{
+    text-align:center;padding:80px 20px;color:var(--dim);font-family:var(--mono);
+  }
+
+  /* Toolbar */
+  .toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;
+  }
+  .uploadBtn{
+    background:var(--accent);color:#fff;border:none;padding:10px 18px;border-radius:8px;
+    font-weight:600;cursor:pointer;font-size:13px;
+  }
+  select.catSelect{
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:9px 12px;border-radius:8px;font-family:var(--mono);font-size:13px;
+  }
+  .deleteSelBtn{
+    background:var(--danger);color:#fff;border:none;padding:9px 16px;border-radius:8px;
+    cursor:pointer;font-size:13px;display:none;
+  }
+
+  .uploadQueue{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+  .uploadRow{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+    display:flex;align-items:center;gap:12px;font-size:12px;
+  }
+  .uploadRow .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .barOuter{width:120px;height:5px;background:var(--panel2);border-radius:99px;overflow:hidden;}
+  .barInner{height:100%;background:var(--accent);width:0%;transition:.2s;}
+  .pct{width:40px;text-align:right;color:var(--dim);font-family:var(--mono);}
+
+  /* Player modal */
+  #playerModal{
+    position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:200;
+    display:none;align-items:center;justify-content:center;padding:20px;
+  }
+  #playerModal.show{display:flex;}
+  #playerModal video{max-width:100%;max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:10px;background:#000;}
+  #closePlayer{
+    position:absolute;top:18px;right:22px;color:#fff;font-size:28px;cursor:pointer;
+    background:rgba(255,255,255,0.08);width:40px;height:40px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+  }
+  #backPlayer{
+    position:absolute;top:18px;left:22px;color:#fff;font-size:24px;cursor:pointer;
+    background:rgba(255,255,255,0.08);width:40px;height:40px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;z-index:1;
+  }
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--line);padding:11px 20px;border-radius:10px;
+    font-size:13px;z-index:300;opacity:0;pointer-events:none;transition:.25s;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,-6px);}
+
+  @media(max-width:600px){
+    .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PASSWORD GATE — intentionally blank, no labels/hints ============ -->
+<div id="gate">
+  <div class="scan"></div>
+  <input id="gateInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <header>
+    <div class="headRow">
+      <div class="brand"><span class="dot"></span><span id="brandLabel">Library</span></div>
+      <div class="storageBar"><div class="storageFill" id="storageFill"></div></div>
+      <div class="storageText" id="storageText">0 GB / 0 GB used</div>
+    </div>
+    <div class="cats" id="catRow">
+      <button class="catBtn active" data-cat="All">All</button>
+      <button class="catBtn" data-cat="A">A</button>
+      <button class="catBtn" data-cat="B">B</button>
+      <button class="catBtn" data-cat="C">C</button>
+      <button class="catBtn" data-cat="D">D</button>
+      <button class="catBtn" data-cat="E">E</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Single unified panel: upload, view, download, delete — all on one page -->
+    <div id="panel">
+      <div class="toolbar">
+        <button class="uploadBtn" id="pickFilesBtn">+ Upload files</button>
+        <input type="file" id="fileInput" multiple style="display:none;">
+        <select class="catSelect" id="uploadCatSelect">
+          <option value="A">Save to A</option>
+          <option value="B">Save to B</option>
+          <option value="C">Save to C</option>
+          <option value="D">Save to D</option>
+          <option value="E">Save to E</option>
+        </select>
+        <select class="catSelect" id="moveCatSelect">
+          <option value="A">Move to A</option>
+          <option value="B">Move to B</option>
+          <option value="C">Move to C</option>
+          <option value="D">Move to D</option>
+          <option value="E">Move to E</option>
+        </select>
+        <button class="deleteSelBtn" id="moveSelBtn" style="background:var(--good);">Move selected</button>
+        <button class="deleteSelBtn" id="downloadSelBtn" style="background:var(--accent);">Download selected</button>
+        <button class="deleteSelBtn" id="deleteSelBtn">Delete selected</button>
+        <button class="deleteSelBtn" id="scanBtn" style="display:block;background:var(--panel2);border:1px solid var(--line);color:var(--text);">Scan Cloudinary</button>
+        <button class="deleteSelBtn" id="deleteAllBtn" style="display:block;background:transparent;border:1px solid var(--danger);color:var(--danger);">Delete ALL</button>
+      </div>
+      <div class="uploadQueue" id="uploadQueue"></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="emptyMsg" style="display:none;">Nothing here yet.</div>
+  </main>
+</div>
+
+<!-- Player -->
+<div id="playerModal">
+  <div id="backPlayer" title="Back">&#8592;</div>
+  <div id="closePlayer">&times;</div>
+  <video id="playerVideo" controls playsinline preload="auto"></video>
+  <img id="playerImage" style="display:none;max-width:100%;max-height:88vh;object-fit:contain;border-radius:10px;">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, collectionGroup, addDoc, deleteDoc, doc, updateDoc,
+  onSnapshot, orderBy, query, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+/* ================================================================
+   NEW DATABASE: replace the values below with your NEW accounts.
+   Firebase  -> Firebase Console > Project settings > Your apps
+   Cloudinary -> Dashboard (cloud name, API key/secret, unsigned preset)
+   ================================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyBfKEKEgE2SZUchDpKdTXmq68V60a1aT9s",
+  authDomain: "crizon-6f77e.firebaseapp.com",
+  databaseURL: "https://crizon-6f77e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "crizon-6f77e",
+  storageBucket: "crizon-6f77e.firebasestorage.app",
+  messagingSenderId: "565513456297",
+  appId: "1:565513456297:web:d73db49a9f2b0b930037b8"
+};
+
+const CLOUD_NAME = "h8dhf04s";
+const UPLOAD_PRESET = "myfile";
+// NOTE: keeping the API secret in client code is insecure — see chat message.
+const CLOUD_API_KEY = "778428655374127";
+const CLOUD_API_SECRET = "UOTUfCmUWgpXuQk9KWWJDIXZcvg";
+
+const GATE_PASSWORD = "police";
+// Optional but recommended: URL of the Cloudflare Worker from cloudinary-admin-worker.js
+// (lets this page LIST every file stored in Cloudinary and delete without the API secret).
+const WORKER_URL = ""; // e.g. "https://crizon-admin.YOURNAME.workers.dev"
+let adminKey = "";
+const STORAGE_LIMIT_GB = 25; // adjust to your actual Cloudinary plan limit
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const contentCol = collection(db, "content");
+
+/* ---------------- STATE ---------------- */
+let allDocs = [];
+let activeCat = "All";
+let hasAccess = true; // single unified page: whoever passes the gate has full access
+let selectedIds = new Set();
+
+/* ================= GATE (protects the whole single page) ================= */
+const gate = document.getElementById('gate');
+const gateInput = document.getElementById('gateInput');
+const appEl = document.getElementById('app');
+
+function unlock(){
+  gate.classList.add('hidden');
+  appEl.classList.add('show');
+  document.getElementById('brandLabel').textContent = 'Library';
+}
+
+gateInput.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){
+    if(gateInput.value === GATE_PASSWORD){
+      adminKey = gateInput.value;
+      unlock();
+    } else {
+      gate.classList.add('gateShake');
+      setTimeout(()=>gate.classList.remove('gateShake'),350);
+      gateInput.value='';
+    }
+  }
+});
+
+setTimeout(()=>gateInput.focus(),50);
+
+/* ================= RENDER ================= */
+const grid = document.getElementById('grid');
+const emptyMsg = document.getElementById('emptyMsg');
+const storageFill = document.getElementById('storageFill');
+const storageText = document.getElementById('storageText');
+
+function fmtBytes(b){
+  if(!b) return "0 MB";
+  const gb = b/1073741824;
+  if(gb>=1) return gb.toFixed(2)+" GB";
+  return (b/1048576).toFixed(1)+" MB";
+}
+
+function updateStorage(){
+  const totalBytes = allDocs.reduce((s,d)=>s+(d.bytes||0),0);
+  const limitBytes = STORAGE_LIMIT_GB*1073741824;
+  const pct = Math.min(100,(totalBytes/limitBytes)*100);
+  storageFill.style.width = pct+'%';
+  storageText.textContent = `${fmtBytes(totalBytes)} / ${STORAGE_LIMIT_GB} GB used`;
+}
+
+function render(){
+  const list = activeCat==='All' ? allDocs : allDocs.filter(d=>d.category===activeCat);
+  grid.innerHTML='';
+  emptyMsg.style.display = list.length? 'none':'block';
+  list.forEach(d=>{
+    const card = document.createElement('div');
+    card.className='card';
+    const ftype = d.type || 'video';
+    let thumbHtml, actionsHtml;
+    if(ftype==='image'){
+      thumbHtml = `<img src="${d.url}" style="width:100%;height:100%;object-fit:cover;">`;
+      actionsHtml = `<button class="btn" data-dl="${d.url}" data-dlname="${d.filename||'image.jpg'}">Download</button>`;
+    } else if(ftype==='raw'){
+      thumbHtml = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;">📄</div>`;
+      actionsHtml = `<button class="btn" data-dl="${d.url}" data-dlname="${d.filename||'file'}">Download</button>`;
+    } else {
+      thumbHtml = `<video src="${d.url}#t=0.5" muted preload="metadata"></video>
+        <div class="playIcon"><svg viewBox="0 0 24 24" fill="#fff"><circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.4)"/><path d="M9 7l9 5-9 5V7z"/></svg></div>`;
+      actionsHtml = `<button class="btn" data-dl="${d.url}" data-dlname="${d.filename||'video.mp4'}">Video</button>
+          <button class="btn" data-dlaudio="${d.url}" data-dlname="${(d.filename||'audio').replace(/\.[^/.]+$/,'')}">Audio</button>`;
+    }
+    card.innerHTML = `
+      <div class="thumbWrap" data-play="${ftype==='raw'?'':d.url}" data-ftype="${ftype}">
+        ${thumbHtml}
+        <div class="catTag">${d.category||'-'}</div>
+        ${hasAccess?`<div class="selectBox" data-id="${d.id}"></div>`:''}
+      </div>
+      <div class="cardBody">
+        <div class="cardName" title="${d.filename||''}">${d.filename||'file'}</div>
+        <div class="cardMeta">${fmtBytes(d.bytes)}</div>
+        <div class="cardActions">
+          ${actionsHtml}
+          ${hasAccess?`<button class="btn danger" data-del="${d.id}">Delete</button>`:''}
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+  updateStorage();
+
+  grid.querySelectorAll('[data-play]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('selectBox')) return;
+      const url = el.dataset.play;
+      if(!url) return; // raw files (zip/pdf/apk) have no preview
+      if(el.dataset.ftype==='image') openImage(url);
+      else openPlayer(url);
+    });
+  });
+  grid.querySelectorAll('[data-dl]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      downloadFile(el.dataset.dl, el.dataset.dlname);
+    });
+  });
+  grid.querySelectorAll('[data-dlaudio]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      downloadAudio(el.dataset.dlaudio, el.dataset.dlname);
+    });
+  });
+  if(hasAccess){
+    grid.querySelectorAll('.selectBox').forEach(el=>{
+      el.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        const id = el.dataset.id;
+        if(selectedIds.has(id)){ selectedIds.delete(id); el.classList.remove('on'); }
+        else { selectedIds.add(id); el.classList.add('on'); }
+        document.getElementById('deleteSelBtn').style.display = selectedIds.size? 'block':'none';
+        document.getElementById('downloadSelBtn').style.display = selectedIds.size? 'block':'none';
+        document.getElementById('moveSelBtn').style.display = selectedIds.size? 'block':'none';
+      });
+    });
+    grid.querySelectorAll('[data-del]').forEach(el=>{
+      el.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        await removeItem(el.dataset.del);
+      });
+    });
+  }
+}
+
+document.querySelectorAll('.catBtn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.catBtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeCat = btn.dataset.cat;
+    render();
+  });
+});
+
+/* ================= DATA SOURCES ================= */
+// 1) content        -> files uploaded from this page
+// 2) thread (group) -> files sent inside the chat app: messages/{chat}/thread/{id}
+// 3) Cloudinary     -> every file really stored in Cloudinary (needs WORKER_URL)
+let contentDocs = [], threadDocs = [], cloudDocs = [];
+
+function normType(t){
+  if(t==='image') return 'image';
+  if(t==='raw' || t==='file' || t==='document') return 'raw';
+  return 'video'; // video + audio (Cloudinary keeps audio under "video")
+}
+function rtypeOf(t){ return t==='image' ? 'image' : (t==='raw'||t==='file'||t==='document') ? 'raw' : 'video'; }
+
+function mergeAll(){
+  const seen = new Set();
+  const out = [];
+  [...contentDocs, ...threadDocs].forEach(d=>{ if(d.cloudinaryId) seen.add(d.cloudinaryId); out.push(d); });
+  cloudDocs.forEach(d=>{ if(!seen.has(d.cloudinaryId)) out.push(d); });
+  out.sort((x,y)=>(y.createdAt||0)-(x.createdAt||0));
+  allDocs = out;
+  emptyMsg.textContent = 'Nothing here yet.';
+  render();
+}
+function tsMs(v){ return v && v.toMillis ? v.toMillis() : (typeof v==='number' ? v : 0); }
+function showDbError(where, err){
+  console.error(where, err);
+  const msg = (err && err.code==='permission-denied')
+    ? 'Firestore permission denied ('+where+'). Open Firebase Console > Firestore > Rules and allow read/delete — see instructions.'
+    : 'Error ('+where+'): '+(err && err.message || err);
+  emptyMsg.textContent = msg; emptyMsg.style.display='block';
+  showToast(msg.slice(0,80));
+}
+
+onSnapshot(query(contentCol), (snap)=>{
+  contentDocs = snap.docs.map(d=>{
+    const x = d.data();
+    return { id:'c:'+d.id, _path:d.ref.path, _src:'content', ...x, createdAt: tsMs(x.createdAt),
+             rtype: rtypeOf(x.type), type: normType(x.type) };
+  });
+  mergeAll();
+}, (e)=>showDbError('content', e));
+
+onSnapshot(collectionGroup(db,'thread'), (snap)=>{
+  threadDocs = snap.docs.map(d=>{
+    const x = d.data();
+    return { id:'t:'+d.ref.path, _path:d.ref.path, _src:'chat',
+             url:x.url, cloudinaryId:x.publicId, filename:x.fileName || (x.type==='audio'?'voice message':x.type||'file'),
+             bytes:x.size||0, category:'Chat', createdAt: tsMs(x.createdAt),
+             rtype: x.resourceType || rtypeOf(x.type), type: normType(x.type) };
+  }).filter(d=>d.url); // text messages have no file
+  mergeAll();
+}, (e)=>showDbError('chat messages', e));
+
+async function workerCall(path, opts){
+  if(!WORKER_URL) throw new Error('WORKER_URL not set');
+  const res = await fetch(WORKER_URL.replace(/\/$/,'')+path, {
+    ...(opts||{}),
+    headers: { 'X-Admin-Key': adminKey, 'Content-Type':'application/json' }
+  });
+  if(!res.ok) throw new Error('Worker '+res.status+': '+(await res.text()).slice(0,120));
+  return res.json();
+}
+
+async function scanCloudinary(){
+  if(!WORKER_URL){ showToast('Cloudinary scan needs WORKER_URL (see worker file)'); return; }
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.textContent = 'Scanning...';
+  try{
+    const data = await workerCall('/list');
+    cloudDocs = (data.items||[]).map(r=>({
+      id:'cl:'+r.resource_type+':'+encodeURIComponent(r.public_id), _src:'cloud',
+      url:r.secure_url, cloudinaryId:r.public_id, rtype:r.resource_type, type: normType(r.resource_type),
+      filename: r.public_id.split('/').pop()+(r.format?'.'+r.format:''),
+      bytes:r.bytes||0, category:'Cloud', createdAt: r.created_at ? Date.parse(r.created_at) : 0
+    }));
+    mergeAll();
+    showToast('Found '+cloudDocs.length+' files in Cloudinary');
+  }catch(err){ console.error(err); showToast('Scan failed: '+err.message); }
+  btn.disabled = false; btn.textContent = 'Scan Cloudinary';
+}
+document.getElementById('scanBtn').addEventListener('click', scanCloudinary);
+
+/* ================= PLAYER ================= */
+const playerModal = document.getElementById('playerModal');
+const playerVideo = document.getElementById('playerVideo');
+const playerImage = document.getElementById('playerImage');
+function openPlayer(url){
+  playerImage.style.display='none';
+  playerVideo.style.display='block';
+  playerVideo.src = url;
+  playerVideo.playbackRate = 1;
+  playerModal.classList.add('show');
+  playerVideo.play().catch(()=>{});
+}
+function openImage(url){
+  playerVideo.pause();
+  playerVideo.style.display='none';
+  playerVideo.src='';
+  playerImage.style.display='block';
+  playerImage.src = url;
+  playerModal.classList.add('show');
+}
+
+// Press and HOLD (350ms+) anywhere on the video = 2x speed, release = back to normal.
+// Quick taps are ignored so native play/pause/seek controls keep working normally.
+let holdTimer=null;
+playerVideo.addEventListener('pointerdown', ()=>{
+  holdTimer = setTimeout(()=>{ playerVideo.playbackRate = 2; }, 350);
+});
+function resetSpeed(){
+  clearTimeout(holdTimer);
+  playerVideo.playbackRate = 1;
+}
+playerVideo.addEventListener('pointerup', resetSpeed);
+playerVideo.addEventListener('pointerleave', resetSpeed);
+playerVideo.addEventListener('pointercancel', resetSpeed);
+function closePlayerFn(){
+  playerModal.classList.remove('show');
+  playerVideo.pause();
+  playerVideo.src='';
+  playerImage.src='';
+}
+document.getElementById('closePlayer').addEventListener('click', closePlayerFn);
+document.getElementById('backPlayer').addEventListener('click', closePlayerFn);
+
+/* ================= UPLOAD ================= */
+const fileInput = document.getElementById('fileInput');
+const pickFilesBtn = document.getElementById('pickFilesBtn');
+const uploadQueue = document.getElementById('uploadQueue');
+const uploadCatSelect = document.getElementById('uploadCatSelect');
+
+if(pickFilesBtn){
+  pickFilesBtn.addEventListener('click', ()=>fileInput.click());
+  fileInput.addEventListener('change', (e)=>{
+    const files = Array.from(e.target.files);
+    files.forEach(f=>uploadFile(f, uploadCatSelect.value));
+    fileInput.value='';
+  });
+}
+
+const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB per chunk — required by Cloudinary for large/video/raw files
+let activeUploadCount = 0;
+
+function detectResourceType(file){
+  if(file.type.startsWith('video/')) return 'video';
+  // Cloudinary stores audio under the "video" resource type
+  if(file.type.startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac|wma|amr)$/i.test(file.name)) return 'video';
+  if(file.type.startsWith('image/')) return 'image';
+  return 'raw'; // zip, pdf, apk, doc, or anything else
+}
+
+function uploadFile(file, category){
+  const resourceType = detectResourceType(file);
+  const row = document.createElement('div');
+  row.className='uploadRow';
+  row.innerHTML = `<span class="name">${file.name}</span>
+    <div class="barOuter"><div class="barInner"></div></div>
+    <span class="pct">0%</span>
+    <button class="btn danger" style="flex:none;padding:5px 10px;" data-stop>Stop</button>`;
+  uploadQueue.appendChild(row);
+  const barInner = row.querySelector('.barInner');
+  const pctEl = row.querySelector('.pct');
+  const stopBtn = row.querySelector('[data-stop]');
+
+  const uploadId = 'uqid' + Date.now() + Math.random().toString(36).slice(2);
+  const total = file.size;
+  let start = 0;
+  let lastResult = null;
+  let stopped = false;
+  let currentXhr = null;
+
+  activeUploadCount++;
+  stopBtn.addEventListener('click', ()=>{
+    stopped = true;
+    if(currentXhr) currentXhr.abort();
+    pctEl.textContent='stopped';
+    showToast('Upload stopped: '+file.name);
+    activeUploadCount = Math.max(0, activeUploadCount-1);
+    setTimeout(()=>row.remove(),1200);
+  });
+
+  function sendNextChunk(retryCount){
+    retryCount = retryCount || 0;
+    if(stopped) return;
+    const end = Math.min(start + CHUNK_SIZE, total);
+    const chunk = file.slice(start, end);
+    const fd = new FormData();
+    fd.append('file', chunk);
+    fd.append('upload_preset', UPLOAD_PRESET);
+    fd.append('cloud_name', CLOUD_NAME);
+
+    const xhr = new XMLHttpRequest();
+    currentXhr = xhr;
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`);
+    if(resourceType!=='image'){
+      xhr.setRequestHeader('X-Unique-Upload-Id', uploadId);
+      xhr.setRequestHeader('Content-Range', `bytes ${start}-${end-1}/${total}`);
+    }
+
+    xhr.upload.addEventListener('progress', (e)=>{
+      if(e.lengthComputable){
+        const doneBytes = start + e.loaded;
+        const pct = Math.min(100, Math.round((doneBytes/total)*100));
+        barInner.style.width = pct+'%';
+        pctEl.textContent = pct+'%';
+      }
+    });
+
+    function handleChunkFailure(reason){
+      if(stopped) return;
+      if(retryCount < 4){
+        pctEl.textContent = 'retry '+(retryCount+1)+'/4...';
+        setTimeout(()=>sendNextChunk(retryCount+1), 1500 * (retryCount+1));
+      } else {
+        pctEl.textContent='error';
+        showToast((file.name)+' failed: '+reason);
+        console.error('Upload failed for', file.name, '-', reason);
+        activeUploadCount = Math.max(0, activeUploadCount-1);
+      }
+    }
+
+    xhr.onload = async ()=>{
+      if(stopped) return;
+      if(xhr.status>=200 && xhr.status<300){
+        lastResult = JSON.parse(xhr.responseText);
+        start = end;
+        if(resourceType!=='image' && start < total){
+          sendNextChunk(0);
+        } else {
+          await addDoc(contentCol, {
+            type: resourceType,
+            url: lastResult.secure_url,
+            cloudinaryId: lastResult.public_id,
+            filename: file.name,
+            bytes: lastResult.bytes || file.size,
+            category: category,
+            content: '',
+            createdAt: serverTimestamp()
+          });
+          pctEl.textContent='done';
+          barInner.style.width='100%';
+          showToast(file.name+' uploaded');
+          activeUploadCount = Math.max(0, activeUploadCount-1);
+          setTimeout(()=>row.remove(),1200);
+        }
+      } else {
+        // Surface Cloudinary's actual error message (e.g. plan file-size limit,
+        // preset misconfiguration) instead of a generic failure.
+        let reason = 'HTTP '+xhr.status;
+        try{ reason = JSON.parse(xhr.responseText)?.error?.message || reason; }catch(err){}
+        handleChunkFailure(reason);
+      }
+    };
+    xhr.onerror = ()=>{
+      handleChunkFailure('network error (connection dropped)');
+    };
+    xhr.send(fd);
+  }
+
+  sendNextChunk(0);
+}
+
+// Warn before closing the tab while an upload is still in progress —
+// browsers do not allow a page to keep uploading after the tab/app is fully closed.
+window.addEventListener('beforeunload', (e)=>{
+  if(activeUploadCount > 0){
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+/* ================= DELETE ================= */
+async function sha1Hex(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-1', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function cloudinaryDestroyOnce(publicId, resourceType){
+  const timestamp = Math.floor(Date.now()/1000);
+  const toSign = `public_id=${publicId}&timestamp=${timestamp}${CLOUD_API_SECRET}`;
+  const signature = await sha1Hex(toSign);
+  const fd = new FormData();
+  fd.append('public_id', publicId);
+  fd.append('timestamp', timestamp);
+  fd.append('api_key', CLOUD_API_KEY);
+  fd.append('signature', signature);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/destroy`, { method:'POST', body: fd });
+  const data = await res.json().catch(()=>({}));
+  return data.result; // 'ok' | 'not found' | undefined (error)
+}
+
+// Tries the stored type first, then the others (audio may be saved as video or raw).
+// Never throws: returns true if the file is gone or was never there.
+async function cloudinaryDestroy(publicId, resourceType){
+  if(WORKER_URL && publicId){
+    try{
+      await workerCall('/delete',{method:'POST',body:JSON.stringify({items:[{public_id:publicId,resource_type:resourceType||'video'}]})});
+      return true;
+    }catch(err){ console.warn('worker delete failed, trying direct', err); }
+  }
+  if(!publicId || publicId==='undefined' || publicId==='null') return true;
+  const order = [resourceType||'video','video','image','raw'].filter((t,i,a)=>a.indexOf(t)===i);
+  let reachedCloudinary = false;
+  for(const t of order){
+    try{
+      const r = await cloudinaryDestroyOnce(publicId, t);
+      if(r==='ok') return true;
+      if(r==='not found') reachedCloudinary = true;
+    }catch(err){
+      console.warn('Cloudinary destroy failed for type', t, err);
+    }
+  }
+  return reachedCloudinary;
+}
+
+async function removeItem(id){
+  const item = allDocs.find(d=>d.id===id);
+  if(!item){ showToast('Item not found'); return; }
+  let cloudOk = true;
+  try{ cloudOk = await cloudinaryDestroy(item.cloudinaryId, item.rtype); }
+  catch(err){ console.error(err); cloudOk = false; }
+  if(item._src==='cloud'){
+    if(cloudOk){ cloudDocs = cloudDocs.filter(d=>d.id!==id); mergeAll(); showToast('Deleted'); }
+    else showToast('Delete failed');
+    return;
+  }
+  try{
+    await deleteDoc(doc(db, ...item._path.split('/')));
+    showToast(cloudOk ? 'Deleted' : 'Deleted from list (file may remain on Cloudinary)');
+  }catch(err){
+    console.error(err);
+    showToast('Delete failed'+(err.code==='permission-denied'?' (Firestore rules)':''));
+  }
+}
+
+document.getElementById('moveSelBtn').addEventListener('click', async ()=>{
+  const targetCat = document.getElementById('moveCatSelect').value;
+  const ids = Array.from(selectedIds);
+  for(const id of ids){
+    const it = allDocs.find(d=>d.id===id);
+    if(it && it._src==='content') await updateDoc(doc(db, ...it._path.split('/')), { category: targetCat });
+  }
+  showToast('Moved to '+targetCat);
+  selectedIds.clear();
+  document.getElementById('deleteSelBtn').style.display='none';
+  document.getElementById('downloadSelBtn').style.display='none';
+  document.getElementById('moveSelBtn').style.display='none';
+});
+
+document.getElementById('downloadSelBtn').addEventListener('click', async ()=>{
+  const ids = Array.from(selectedIds);
+  for(const id of ids){
+    const item = allDocs.find(d=>d.id===id);
+    if(item) downloadFile(item.url, item.filename||'video.mp4');
+    await new Promise(r=>setTimeout(r, 400));
+  }
+});
+
+document.getElementById('deleteSelBtn').addEventListener('click', async ()=>{
+  const ids = Array.from(selectedIds);
+  for(const id of ids){
+    await removeItem(id);
+  }
+  selectedIds.clear();
+  document.getElementById('deleteSelBtn').style.display='none';
+  document.getElementById('downloadSelBtn').style.display='none';
+  document.getElementById('moveSelBtn').style.display='none';
+});
+
+document.getElementById('deleteAllBtn').addEventListener('click', async ()=>{
+  const items = allDocs.slice();
+  if(!items.length){ showToast('Nothing to delete'); return; }
+  if(!confirm('Delete ALL '+items.length+' items (chat files, uploads, Cloudinary files)? This cannot be undone.')) return;
+  if(!confirm('Final confirmation: permanently delete everything?')) return;
+  const btn = document.getElementById('deleteAllBtn');
+  btn.disabled = true;
+  let done = 0, failed = 0;
+  const bump = ()=>{ done++; btn.textContent = 'Deleting '+done+'/'+items.length; };
+
+  // Cloud-only files: bulk delete through the worker (100 per call)
+  const cloud = items.filter(i=>i._src==='cloud');
+  for(const t of ['image','video','raw']){
+    const ids = cloud.filter(i=>i.rtype===t);
+    for(let i=0;i<ids.length;i+=100){
+      const part = ids.slice(i,i+100);
+      try{
+        await workerCall('/delete',{method:'POST',body:JSON.stringify({items:part.map(x=>({public_id:x.cloudinaryId,resource_type:t}))})});
+      }catch(err){ console.error(err); failed += part.length; }
+      part.forEach(bump);
+    }
+  }
+  // Firestore-backed items (chat + uploads): delete file then record
+  const rest = items.filter(i=>i._src!=='cloud');
+  const BATCH = 5;
+  for(let i=0;i<rest.length;i+=BATCH){
+    await Promise.all(rest.slice(i,i+BATCH).map(async (item)=>{
+      try{
+        await cloudinaryDestroy(item.cloudinaryId, item.rtype);
+        await deleteDoc(doc(db, ...item._path.split('/')));
+      }catch(err){ console.error(err); failed++; }
+      bump();
+    }));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Delete ALL';
+  cloudDocs = []; selectedIds.clear();
+  document.getElementById('deleteSelBtn').style.display='none';
+  document.getElementById('downloadSelBtn').style.display='none';
+  document.getElementById('moveSelBtn').style.display='none';
+  mergeAll();
+  if(WORKER_URL) scanCloudinary();
+  showToast(failed ? ('Deleted '+(items.length-failed)+', failed '+failed) : 'Everything deleted');
+});
+
+function attachmentUrl(url, filename){
+  const safeName = encodeURIComponent((filename||'video').replace(/\.[^/.]+$/,'').replace(/[\/\\]/g,'_'));
+  return url.includes('/upload/') ? url.replace('/upload/', `/upload/fl_attachment:${safeName}/`) : url;
+}
+
+function downloadFile(url, filename){
+  const a = document.createElement('a');
+  a.href = attachmentUrl(url, filename);
+  a.download = filename || 'video.mp4';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast('Downloading '+filename+'...');
+}
+
+// Cloudinary transcodes video to audio-only on the fly when the delivery extension is .mp3
+function downloadAudio(videoUrl, baseName){
+  const safeName = encodeURIComponent((baseName||'audio').replace(/[\/\\]/g,'_'));
+  let audioUrl = videoUrl.includes('/upload/')
+    ? videoUrl.replace('/upload/', `/upload/fl_attachment:${safeName}/`)
+    : videoUrl;
+  audioUrl = audioUrl.replace(/\.[a-zA-Z0-9]+($|\?)/, '.mp3$1');
+  const a = document.createElement('a');
+  a.href = audioUrl;
+  a.download = (baseName||'audio') + '.mp3';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast('Downloading audio...');
+}
+
+/* ================= TOAST ================= */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 4000);
+}
+</script>
+</body>
+</html>
